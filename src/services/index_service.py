@@ -123,6 +123,7 @@ class IndexService:
         # Use default settings if not provided
         if settings is None:
             settings = IndexSettings(
+                backend=self.settings.leann_backend,
                 embedding_model=self.settings.embedding_model,
                 graph_degree=self.settings.graph_degree,
                 build_complexity=self.settings.build_complexity,

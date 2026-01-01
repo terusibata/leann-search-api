@@ -1,5 +1,5 @@
 # Schemas module
-from src.schemas.common import APIResponse, ErrorDetail, ErrorCode
+from src.schemas.common import APIResponse, ErrorDetail, ErrorCode, HealthResponse, PaginationInfo
 from src.schemas.index import (
     IndexSettings,
     IndexInfo,
@@ -49,6 +49,8 @@ __all__ = [
     "APIResponse",
     "ErrorDetail",
     "ErrorCode",
+    "HealthResponse",
+    "PaginationInfo",
     # Index
     "IndexSettings",
     "IndexInfo",

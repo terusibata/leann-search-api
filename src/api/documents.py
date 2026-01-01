@@ -53,14 +53,14 @@ async def add_documents(index_name: str, request: AddDocumentsRequest):
     service = get_document_service()
 
     documents = [doc.model_dump() for doc in request.documents]
-    options = request.options or {}
+    options = request.options
 
     results = service.add_documents(
         index_name,
         documents,
-        chunk_size=options.chunk_size if hasattr(options, "chunk_size") else None,
-        chunk_overlap=options.chunk_overlap if hasattr(options, "chunk_overlap") else None,
-        update_if_exists=options.update_if_exists if hasattr(options, "update_if_exists") else False,
+        chunk_size=options.chunk_size if options else None,
+        chunk_overlap=options.chunk_overlap if options else None,
+        update_if_exists=options.update_if_exists if options else False,
     )
 
     added = sum(1 for r in results if r.status == "added")

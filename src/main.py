@@ -1,5 +1,8 @@
 """FastAPI application entry point."""
 
+from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
+
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -7,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from src.api.router import api_router
 from src.config import get_settings
-from src.schemas.common import APIResponse, ErrorCode, HealthResponse
+from src.schemas.common import ErrorCode, HealthResponse
 
 # Configure structured logging
 structlog.configure(
@@ -32,12 +35,33 @@ logger = structlog.get_logger()
 
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan handler."""
+    # Startup
+    logger.info(
+        "Starting LEANN Search API",
+        version=settings.app_version,
+        index_dir=settings.index_dir,
+        embedding_model=settings.embedding_model,
+    )
+    # Ensure index directory exists
+    settings.index_path.mkdir(parents=True, exist_ok=True)
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down LEANN Search API")
+
+
 app = FastAPI(
     title="LEANN Search API",
     description="LEANN-based vector search API for RAG applications",
     version=settings.app_version,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 
@@ -94,26 +118,6 @@ async def health_check():
 
 # Include API router
 app.include_router(api_router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup."""
-    logger.info(
-        "Starting LEANN Search API",
-        version=settings.app_version,
-        index_dir=settings.index_dir,
-        embedding_model=settings.embedding_model,
-    )
-
-    # Ensure index directory exists
-    settings.index_path.mkdir(parents=True, exist_ok=True)
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    logger.info("Shutting down LEANN Search API")
 
 
 if __name__ == "__main__":

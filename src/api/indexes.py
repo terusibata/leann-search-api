@@ -11,7 +11,6 @@ from src.schemas.index import (
     IndexListResponse,
     IndexRebuildRequest,
     IndexRebuildResponse,
-    IndexSettings,
 )
 from src.services.index_service import get_index_service
 
