@@ -455,6 +455,24 @@ class DocumentService:
 
         return deleted_count
 
+    def _get_chunk_mapping_path(self, index_name: str) -> Path:
+        """Get path for chunk ID mapping file."""
+        return self.index_dir / index_name / "chunk_mapping.json"
+
+    def _save_chunk_mapping(self, index_name: str, mapping: list[str]) -> None:
+        """Save chunk ID mapping (index position -> chunk_id)."""
+        mapping_path = self._get_chunk_mapping_path(index_name)
+        with open(mapping_path, "w") as f:
+            json.dump(mapping, f, indent=2)
+
+    def _load_chunk_mapping(self, index_name: str) -> list[str]:
+        """Load chunk ID mapping."""
+        mapping_path = self._get_chunk_mapping_path(index_name)
+        if mapping_path.exists():
+            with open(mapping_path) as f:
+                return json.load(f)
+        return []
+
     def rebuild_index(self, index_name: str) -> int:
         """Rebuild the LEANN index. Returns chunk count."""
         chunks_path = self._get_chunks_path(index_name)
@@ -463,7 +481,7 @@ class DocumentService:
         if not chunks_path.exists():
             return 0
 
-        chunk_files = list(chunks_path.glob("*.json"))
+        chunk_files = sorted(chunks_path.glob("*.json"))
         if not chunk_files:
             return 0
 
@@ -475,6 +493,7 @@ class DocumentService:
 
         settings = self._get_index_settings(index_name)
 
+        # Create builder with settings
         builder = LeannBuilder(
             backend_name=settings.backend,
             embedding_model=settings.embedding_model,
@@ -483,12 +502,26 @@ class DocumentService:
             build_complexity=settings.build_complexity,
         )
 
+        # Track chunk_id mapping (index position -> chunk_id)
+        chunk_mapping: list[str] = []
+
         for chunk_file in chunk_files:
             with open(chunk_file) as f:
                 chunk_data = json.load(f)
             builder.add_text(chunk_data["content"])
+            chunk_mapping.append(chunk_data["chunk_id"])
 
+        # Build the index
         builder.build_index(str(leann_path))
+
+        # Save chunk mapping for search
+        self._save_chunk_mapping(index_name, chunk_mapping)
+
+        logger.info(
+            "LEANN index built successfully",
+            index_name=index_name,
+            chunk_count=len(chunk_files),
+        )
 
         return len(chunk_files)
 

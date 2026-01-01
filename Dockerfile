@@ -4,7 +4,6 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libomp-dev \
     libboost-all-dev \
-    git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -13,13 +12,9 @@ WORKDIR /app
 # uv インストール
 RUN pip install uv
 
-# 依存関係
+# 依存関係 (LEANNを含む)
 COPY pyproject.toml .
 RUN uv pip install --system -e .
-
-# LEANN
-COPY leann/ ./leann/
-RUN cd leann && uv pip install --system -e .
 
 # アプリケーション
 COPY src/ ./src/

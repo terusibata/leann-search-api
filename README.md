@@ -14,7 +14,7 @@ LEANNベースの軽量・高精度なベクトル検索APIサーバー。外部
 |------|------|
 | 言語 | Python 3.11+ |
 | フレームワーク | FastAPI |
-| 検索エンジン | LEANN |
+| 検索エンジン | LEANN (pip install leann) |
 | 埋め込みモデル | cl-nagoya/ruri-v3-310m (デフォルト) |
 | コンテナ | Docker + Docker Compose |
 | パッケージ管理 | uv |
@@ -34,9 +34,6 @@ LEANNベースの軽量・高精度なベクトル検索APIサーバー。外部
 git clone <repository-url>
 cd leann-search-api
 
-# LEANNをサブモジュールとして追加
-git submodule add https://github.com/yichuan-w/LEANN.git leann
-
 # 環境変数を設定
 cp .env.example .env
 
@@ -54,15 +51,38 @@ curl http://localhost:8000/health
 uv venv
 source .venv/bin/activate
 
-# 依存関係をインストール
+# 依存関係をインストール (LEANNを含む)
 uv pip install -e ".[dev]"
-
-# LEANNをインストール
-cd leann && uv pip install -e . && cd ..
 
 # 開発サーバーを起動
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+## LEANN ライブラリ
+
+本プロジェクトは [LEANN](https://pypi.org/project/leann/) ベクトル検索ライブラリを使用しています。
+
+```bash
+pip install leann
+```
+
+### 主要コンポーネント
+
+- **LeannBuilder**: インデックス構築
+  - `add_text(text)`: テキストを追加
+  - `build_index(path)`: インデックスを構築・保存
+
+- **LeannSearcher**: 検索実行
+  - `search(query, top_k)`: 類似検索を実行
+
+### 設定パラメータ
+
+| パラメータ | デフォルト | 説明 |
+|-----------|-----------|------|
+| `backend_name` | `hnsw` | バックエンド (`hnsw` または `diskann`) |
+| `embedding_model` | `cl-nagoya/ruri-v3-310m` | 埋め込みモデル |
+| `graph_degree` | `32` | グラフ次数 |
+| `build_complexity` | `64` | 構築複雑度 |
 
 ## API仕様
 
@@ -136,6 +156,14 @@ curl -X POST http://localhost:8000/api/v1/indexes/company_docs/documents \
   }'
 ```
 
+### インデックス再構築
+
+ドキュメント追加後、検索を有効にするためにインデックスを再構築します:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/indexes/company_docs/rebuild
+```
+
 ### 検索
 
 ```bash
@@ -204,6 +232,9 @@ pytest --cov=src
 | `PORT` | `8000` | サーバーポート |
 | `INDEX_DIR` | `./data/indexes` | インデックス保存先 |
 | `EMBEDDING_MODEL` | `cl-nagoya/ruri-v3-310m` | 埋め込みモデル |
+| `LEANN_BACKEND` | `hnsw` | LEANNバックエンド |
+| `GRAPH_DEGREE` | `32` | グラフ次数 |
+| `BUILD_COMPLEXITY` | `64` | 構築複雑度 |
 | `DEFAULT_CHUNK_SIZE` | `512` | デフォルトチャンクサイズ |
 | `DEFAULT_CHUNK_OVERLAP` | `64` | デフォルトオーバーラップ |
 | `DEFAULT_TOP_K` | `10` | デフォルト検索件数 |

@@ -14,7 +14,7 @@ from src.schemas.search import (
     GrepSearchResult,
     SearchResult,
 )
-from src.services.document_service import DocumentService
+from src.services.document_service import DocumentService, get_document_service
 
 logger = structlog.get_logger()
 
@@ -26,7 +26,6 @@ class SearchService:
         self.settings = get_settings()
         self.index_dir = self.settings.index_path
         self._searcher_cache: dict[str, Any] = {}
-        self._embedding_model = None
 
     def _get_leann_index_path(self, index_name: str) -> Path:
         """Get path for LEANN index file."""
@@ -36,20 +35,6 @@ class SearchService:
         """Get path for chunks storage."""
         return self.index_dir / index_name / "chunks"
 
-    def _get_embedding_model(self):
-        """Get or initialize embedding model."""
-        if self._embedding_model is None:
-            try:
-                from sentence_transformers import SentenceTransformer
-
-                self._embedding_model = SentenceTransformer(
-                    self.settings.embedding_model
-                )
-            except ImportError:
-                logger.warning("sentence-transformers not available")
-                return None
-        return self._embedding_model
-
     def _get_searcher(self, index_name: str):
         """Get or create a LEANN searcher for an index."""
         if index_name in self._searcher_cache:
@@ -57,6 +42,7 @@ class SearchService:
 
         leann_path = self._get_leann_index_path(index_name)
         if not leann_path.exists():
+            logger.debug("LEANN index not found", index_name=index_name, path=str(leann_path))
             return None
 
         try:
@@ -64,12 +50,13 @@ class SearchService:
 
             searcher = LeannSearcher(str(leann_path))
             self._searcher_cache[index_name] = searcher
+            logger.info("LEANN searcher created", index_name=index_name)
             return searcher
         except ImportError:
-            logger.warning("LEANN not available")
+            logger.warning("LEANN package not available")
             return None
         except Exception as e:
-            logger.error("Failed to create searcher", index_name=index_name, error=str(e))
+            logger.error("Failed to create LEANN searcher", index_name=index_name, error=str(e))
             return None
 
     def _load_chunk(self, index_name: str, chunk_id: str) -> dict[str, Any] | None:
@@ -87,7 +74,7 @@ class SearchService:
             return []
 
         chunks: list[dict[str, Any]] = []
-        for chunk_file in chunks_path.glob("*.json"):
+        for chunk_file in sorted(chunks_path.glob("*.json")):
             try:
                 with open(chunk_file) as f:
                     chunks.append(json.load(f))
@@ -102,7 +89,7 @@ class SearchService:
         if not filters:
             return chunks
 
-        doc_service = DocumentService()
+        doc_service = get_document_service()
         return [
             chunk
             for chunk in chunks
@@ -126,48 +113,103 @@ class SearchService:
         """
         start_time = time.time()
 
+        # Load chunks and chunk mapping
+        doc_service = get_document_service()
+        chunk_mapping = doc_service._load_chunk_mapping(index_name)
+        chunks = self._load_all_chunks(index_name)
+        chunk_map = {c.get("chunk_id"): c for c in chunks}
+
         # Try to use LEANN searcher first
         searcher = self._get_searcher(index_name)
-        if searcher is not None:
+        if searcher is not None and chunk_mapping:
             try:
-                results = searcher.search(query, top_k=top_k * 2)  # Get more for filtering
+                # Get more results for filtering
+                fetch_k = top_k * 2 if metadata_filters else top_k
+                leann_results = searcher.search(query, top_k=fetch_k)
+
                 search_results: list[SearchResult] = []
 
-                chunks = self._load_all_chunks(index_name)
-                chunk_map = {c.get("chunk_id"): c for c in chunks}
+                # Process LEANN results
+                # LEANN returns results with indices corresponding to add_text order
+                if isinstance(leann_results, list):
+                    # Results are returned as list of (index, score) or similar
+                    for item in leann_results:
+                        if isinstance(item, tuple) and len(item) >= 2:
+                            idx, score = item[0], item[1]
+                        elif isinstance(item, dict):
+                            idx = item.get("index", item.get("id", 0))
+                            score = item.get("score", item.get("similarity", 1.0))
+                        else:
+                            continue
 
-                for idx, score in enumerate(results.get("scores", [])):
-                    if score < min_score:
-                        continue
+                        if score < min_score:
+                            continue
 
-                    chunk_id = results.get("ids", [])[idx] if "ids" in results else None
-                    if chunk_id and chunk_id in chunk_map:
-                        chunk = chunk_map[chunk_id]
+                        # Map index to chunk_id
+                        if 0 <= idx < len(chunk_mapping):
+                            chunk_id = chunk_mapping[idx]
+                            chunk = chunk_map.get(chunk_id)
 
-                        # Apply metadata filter
-                        if metadata_filters:
-                            doc_service = DocumentService()
-                            if not doc_service._matches_filter(
-                                chunk.get("metadata", {}), metadata_filters
-                            ):
-                                continue
+                            if chunk:
+                                # Apply metadata filter
+                                if metadata_filters:
+                                    if not doc_service._matches_filter(
+                                        chunk.get("metadata", {}), metadata_filters
+                                    ):
+                                        continue
 
-                        search_results.append(
-                            SearchResult(
-                                document_id=chunk.get("document_id", ""),
-                                chunk_id=chunk_id,
-                                content=chunk.get("content") if include_content else None,
-                                metadata=chunk.get("metadata") if include_metadata else None,
-                                score=float(score),
-                                position=chunk.get("position", 0),
-                            )
-                        )
+                                search_results.append(
+                                    SearchResult(
+                                        document_id=chunk.get("document_id", ""),
+                                        chunk_id=chunk_id,
+                                        content=chunk.get("content") if include_content else None,
+                                        metadata=chunk.get("metadata") if include_metadata else None,
+                                        score=float(score),
+                                        position=chunk.get("position", 0),
+                                    )
+                                )
 
-                        if len(search_results) >= top_k:
+                                if len(search_results) >= top_k:
+                                    break
+
+                elif hasattr(leann_results, '__iter__'):
+                    # Try to iterate over results
+                    for idx, item in enumerate(leann_results):
+                        if idx >= len(chunk_mapping):
                             break
 
-                query_time_ms = int((time.time() - start_time) * 1000)
-                return search_results, len(search_results), query_time_ms
+                        score = float(item) if isinstance(item, (int, float)) else 1.0
+
+                        if score < min_score:
+                            continue
+
+                        chunk_id = chunk_mapping[idx]
+                        chunk = chunk_map.get(chunk_id)
+
+                        if chunk:
+                            if metadata_filters:
+                                if not doc_service._matches_filter(
+                                    chunk.get("metadata", {}), metadata_filters
+                                ):
+                                    continue
+
+                            search_results.append(
+                                SearchResult(
+                                    document_id=chunk.get("document_id", ""),
+                                    chunk_id=chunk_id,
+                                    content=chunk.get("content") if include_content else None,
+                                    metadata=chunk.get("metadata") if include_metadata else None,
+                                    score=score,
+                                    position=chunk.get("position", 0),
+                                )
+                            )
+
+                            if len(search_results) >= top_k:
+                                break
+
+                if search_results:
+                    query_time_ms = int((time.time() - start_time) * 1000)
+                    return search_results, len(search_results), query_time_ms
 
             except Exception as e:
                 logger.warning("LEANN search failed, falling back to brute force", error=str(e))
@@ -196,8 +238,16 @@ class SearchService:
         start_time: float,
     ) -> tuple[list[SearchResult], int, int]:
         """Brute-force search using direct embedding similarity."""
-        model = self._get_embedding_model()
-        if model is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            model = SentenceTransformer(self.settings.embedding_model)
+        except ImportError:
+            logger.warning("sentence-transformers not available for fallback search")
+            query_time_ms = int((time.time() - start_time) * 1000)
+            return [], 0, query_time_ms
+        except Exception as e:
+            logger.error("Failed to load embedding model", error=str(e))
             query_time_ms = int((time.time() - start_time) * 1000)
             return [], 0, query_time_ms
 
