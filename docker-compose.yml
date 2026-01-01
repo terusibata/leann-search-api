@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: leann-search-api
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - WORKERS=4
+      - INDEX_DIR=/app/data/indexes
+      - LEANN_BACKEND=hnsw
+      - EMBEDDING_MODEL=cl-nagoya/ruri-v3-310m
+      - EMBEDDING_MODE=sentence-transformers
+      - DEFAULT_TOP_K=10
+      - MAX_TOP_K=100
+    volumes:
+      - ./data/indexes:/app/data/indexes
+      - ./data/uploads:/app/data/uploads
+      - model_cache:/root/.cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  model_cache:
