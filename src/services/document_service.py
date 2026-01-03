@@ -497,7 +497,7 @@ class DocumentService:
         builder = LeannBuilder(
             backend_name=settings.backend,
             embedding_model=settings.embedding_model,
-            embedding_mode="sentence-transformers",
+            embedding_mode=self.settings.embedding_mode,
             graph_degree=settings.graph_degree,
             build_complexity=settings.build_complexity,
         )
