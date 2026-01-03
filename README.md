@@ -81,8 +81,106 @@ pip install leann
 |-----------|-----------|------|
 | `backend_name` | `hnsw` | バックエンド (`hnsw` または `diskann`) |
 | `embedding_model` | `cl-nagoya/ruri-v3-310m` | 埋め込みモデル |
+| `embedding_mode` | `sentence-transformers` | 埋め込みモード (`sentence-transformers`, `ollama`, `openai`, `mlx`) |
 | `graph_degree` | `32` | グラフ次数 |
 | `build_complexity` | `64` | 構築複雑度 |
+
+## Ollama統合（プロキシ対応）
+
+このプロジェクトは[Ollama](https://ollama.com/)と統合して、ローカルで埋め込みモデルを実行できます。プロキシ環境下でも動作します。
+
+### メリット
+
+- **完全プライベート**: データが外部に送信されない
+- **オフライン動作**: モデルダウンロード後はインターネット不要
+- **無料**: サブスクリプション費用なし
+- **プロキシ対応**: 企業環境でも使用可能
+
+### セットアップ手順
+
+#### 1. Ollamaのインストール（プロキシ環境）
+
+**Dockerを使用する場合（推奨）:**
+
+```bash
+docker run -d \
+  -e HTTPS_PROXY=https://your.proxy.server:port \
+  -p 11434:11434 \
+  --name ollama \
+  ollama/ollama
+```
+
+**Linuxにインストールする場合:**
+
+```bash
+# インストール
+curl -fsSL https://ollama.com/install.sh | sh
+
+# プロキシ設定（systemd）
+sudo systemctl edit ollama.service
+```
+
+以下を追加:
+```ini
+[Service]
+Environment="HTTPS_PROXY=https://your.proxy.server:port"
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
+
+**注意**: `HTTP_PROXY`は設定しないでください（Ollamaの接続に問題が発生する可能性があります）
+
+#### 2. 埋め込みモデルのダウンロード
+
+```bash
+# 推奨: mxbai-embed-large (334M パラメータ)
+ollama pull mxbai-embed-large
+
+# または軽量版
+ollama pull nomic-embed-text  # 137M パラメータ
+ollama pull all-minilm        # 23M パラメータ
+
+# 確認
+curl http://localhost:11434/api/tags
+```
+
+#### 3. 環境変数の設定
+
+`.env`ファイルを編集:
+
+```bash
+# Ollama使用時の設定
+EMBEDDING_MODEL=mxbai-embed-large
+EMBEDDING_MODE=ollama
+
+# その他の設定
+LEANN_BACKEND=hnsw
+GRAPH_DEGREE=32
+BUILD_COMPLEXITY=64
+```
+
+#### 4. サーバー起動
+
+```bash
+# Docker Composeの場合
+docker-compose up -d
+
+# ローカル開発の場合
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 対応埋め込みモデル
+
+| モデル | パラメータ数 | 用途 |
+|--------|-------------|------|
+| `mxbai-embed-large` | 334M | 高精度（推奨） |
+| `nomic-embed-text` | 137M | バランス型 |
+| `all-minilm` | 23M | 軽量・高速 |
+
+詳細は[Ollama Embedding Models](https://ollama.com/blog/embedding-models)を参照
 
 ## API仕様
 
