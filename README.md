@@ -75,16 +75,6 @@ pip install leann
 - **LeannSearcher**: 検索実行
   - `search(query, top_k)`: 類似検索を実行
 
-### 設定パラメータ
-
-| パラメータ | デフォルト | 説明 |
-|-----------|-----------|------|
-| `backend_name` | `hnsw` | バックエンド (`hnsw` または `diskann`) |
-| `embedding_model` | `cl-nagoya/ruri-v3-310m` | 埋め込みモデル |
-| `embedding_mode` | `sentence-transformers` | 埋め込みモード (`sentence-transformers`, `ollama`, `openai`, `mlx`) |
-| `graph_degree` | `32` | グラフ次数 |
-| `build_complexity` | `64` | 構築複雑度 |
-
 ## Ollama統合（プロキシ対応）
 
 このプロジェクトは[Ollama](https://ollama.com/)と統合して、ローカルで埋め込みモデルを実行できます。プロキシ環境下でも動作します。
@@ -324,17 +314,50 @@ pytest --cov=src
 
 ## 環境変数
 
+### サーバー設定
+
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
 | `HOST` | `0.0.0.0` | サーバーホスト |
 | `PORT` | `8000` | サーバーポート |
-| `INDEX_DIR` | `./data/indexes` | インデックス保存先 |
-| `EMBEDDING_MODEL` | `cl-nagoya/ruri-v3-310m` | 埋め込みモデル |
-| `LEANN_BACKEND` | `hnsw` | LEANNバックエンド |
-| `GRAPH_DEGREE` | `32` | グラフ次数 |
-| `BUILD_COMPLEXITY` | `64` | 構築複雑度 |
-| `DEFAULT_CHUNK_SIZE` | `512` | デフォルトチャンクサイズ |
-| `DEFAULT_CHUNK_OVERLAP` | `64` | デフォルトオーバーラップ |
+| `WORKERS` | `4` | ワーカープロセス数 |
+| `LOG_LEVEL` | `info` | ログレベル |
+
+### LEANN設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `INDEX_DIR` | `./data/indexes` | インデックス保存先ディレクトリ |
+| `LEANN_BACKEND` | `hnsw` | バックエンドアルゴリズム（`hnsw` または `diskann`） |
+| `GRAPH_DEGREE` | `32` | グラフ次数（高いほど精度向上、メモリ増加） |
+| `BUILD_COMPLEXITY` | `64` | 構築時の複雑度（高いほど精度向上、構築時間増加） |
+| `SEARCH_COMPLEXITY` | `32` | 検索時の複雑度（高いほど精度向上、検索時間増加） |
+
+### 埋め込みモデル設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `EMBEDDING_MODEL` | `cl-nagoya/ruri-v3-310m` | 埋め込みモデル名 |
+| `EMBEDDING_MODE` | `sentence-transformers` | 埋め込みモード（`sentence-transformers`, `ollama`, `openai`, `mlx`） |
+
+**埋め込みモード詳細:**
+- `sentence-transformers`: Hugging Faceモデル（オフライン動作）
+- `ollama`: Ollamaローカルモデル（プロキシ対応、完全プライベート）
+- `openai`: OpenAI API（要APIキー）
+- `mlx`: Apple Silicon最適化モデル
+
+### ドキュメント設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `DEFAULT_CHUNK_SIZE` | `512` | デフォルトチャンクサイズ（文字数） |
+| `DEFAULT_CHUNK_OVERLAP` | `64` | チャンク間のオーバーラップ（文字数） |
+| `MAX_UPLOAD_SIZE_MB` | `10` | 最大アップロードサイズ（MB） |
+
+### 検索設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
 | `DEFAULT_TOP_K` | `10` | デフォルト検索件数 |
 | `MAX_TOP_K` | `100` | 最大検索件数 |
 
